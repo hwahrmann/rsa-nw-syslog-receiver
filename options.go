@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"runtime"
 
+	"github.com/google/logger"
 	"gopkg.in/yaml.v2"
 )
 
@@ -21,9 +21,8 @@ var (
 type Options struct {
 	// global options
 	Verbose            bool   `yaml:"verbose"`
-	LogFile            string `yaml:"log-file"`
 	PIDFile            string `yaml:"pid-file"`
-	Logger             *log.Logger
+	Logger             *logger.Logger
 	version            bool
 	LogDecoder         string `yaml:"logdecoder"`
 	LogDecoderProtocol string `yaml:"logdecoderprotocol"`
@@ -40,18 +39,18 @@ func init() {
 
 // NewOptions constructs new options
 func NewOptions() *Options {
-	return &Options{
-		Verbose: false,
-		version: false,
-		PIDFile: "/var/run/rsa-nw-syslog-receiver.pid",
-		Logger:  log.New(os.Stderr, "[syslogreceiver] ", log.Ldate|log.Ltime),
-
-		ListenPort:         5514,
-		LogDecoder:         "",
-		LogDecoderProtocol: "tcp",
-		Protocol:           "tcp",
-		Workers:            5,
-	}
+	options := Options{}
+	options.Verbose = false
+	options.version = false
+	options.PIDFile = "/var/run/rsa-nw-syslog-receiver.pid"
+	options.ListenPort = 5514
+	options.LogDecoder = "127.0.0.1"
+	options.LogDecoderProtocol = "tcp"
+	options.Protocol = "tcp"
+	options.Workers = 5
+	options.Logger = logger.Init("", false, true, ioutil.Discard)
+	logger.SetFlags(0)
+	return &options
 }
 
 // GetOptions gets options through cmd and file
@@ -61,23 +60,14 @@ func GetOptions() *Options {
 	opts.syslogreceiverFlagSet()
 	opts.syslogreceiverVersion()
 
-	if opts.LogFile != "" {
-		f, err := os.OpenFile(opts.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			opts.Logger.Println(err)
-		} else {
-			opts.Logger.SetOutput(f)
-		}
-	}
-
 	if ok := opts.receiverIsRunning(); ok {
 		opts.Logger.Fatal("The Syslog Receiver is already running!")
 	}
 
 	opts.pidWrite()
 
-	opts.Logger.Printf("Welcome to Syslog Receiver v.%s GPL v3", version)
-	opts.Logger.Printf("Copyright (C) 2019 Helmut Wahrmann.")
+	opts.Logger.Infof("Welcome to Syslog Receiver v.%s GPL v3", version)
+	opts.Logger.Info("Copyright (C) 2019 Helmut Wahrmann.")
 
 	return opts
 }
@@ -85,13 +75,13 @@ func GetOptions() *Options {
 func (opts Options) pidWrite() {
 	f, err := os.OpenFile(opts.PIDFile, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		opts.Logger.Println(err)
+		opts.Logger.Info(err)
 		return
 	}
 
 	_, err = fmt.Fprintf(f, "%d", os.Getpid())
 	if err != nil {
-		opts.Logger.Println(err)
+		opts.Logger.Info(err)
 	}
 }
 
@@ -127,7 +117,6 @@ func (opts *Options) syslogreceiverFlagSet() {
 	// global options
 	flag.BoolVar(&opts.Verbose, "verbose", opts.Verbose, "enable/disable verbose logging")
 	flag.BoolVar(&opts.version, "version", opts.version, "show version")
-	flag.StringVar(&opts.LogFile, "log-file", opts.LogFile, "log file name")
 	flag.StringVar(&opts.PIDFile, "pid-file", opts.PIDFile, "pid file name")
 	flag.StringVar(&opts.LogDecoder, "logdecoder", opts.LogDecoder, "the address of the log decoder")
 	flag.StringVar(&opts.LogDecoderProtocol, "logdecoderprotocol", opts.LogDecoderProtocol, "the protcol to connect to the log decoder")
@@ -162,11 +151,11 @@ func syslogreceiverLoadCfg(opts *Options) {
 
 	b, err := ioutil.ReadFile(file)
 	if err != nil {
-		opts.Logger.Println(err)
+		opts.Logger.Info(err)
 		return
 	}
 	err = yaml.Unmarshal(b, opts)
 	if err != nil {
-		opts.Logger.Println(err)
+		opts.Logger.Info(err)
 	}
 }

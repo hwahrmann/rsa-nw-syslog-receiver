@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/logger"
 	"gopkg.in/mcuadros/go-syslog.v2"
 )
 
@@ -22,6 +23,8 @@ type SyslogHandler struct {
 }
 
 var (
+	log *logger.Logger
+
 	syslogMsgCH = make(chan string, 2000)
 
 	// fluentd payload
@@ -38,7 +41,7 @@ var (
 
 // NewSyslogHandler constructs a SyslogHandler
 func NewSyslogHandler() *SyslogHandler {
-	logger = opts.Logger
+	log = opts.Logger
 
 	return &SyslogHandler{
 		listenPort:     opts.ListenPort,
@@ -75,7 +78,7 @@ func (h *SyslogHandler) run() error {
 
 	err := server.Boot()
 	if err != nil {
-		logger.Printf("Error starting Syslog Server: %s", err)
+		log.Errorf("Error starting Syslog Server: %s", err)
 		return errors.New("Error starting Syslog Server")
 	}
 
@@ -85,7 +88,7 @@ func (h *SyslogHandler) run() error {
 		}
 	}(channel)
 
-	logger.Printf("Syslog Receiver is running (listening on [::]:%s/%d workers#: %d)", h.listenProtocol, h.listenPort, h.workers)
+	log.Infof("Syslog Receiver is running (listening on [::]:%s/%d workers#: %d)", h.listenProtocol, h.listenPort, h.workers)
 
 	server.Wait()
 
@@ -93,14 +96,14 @@ func (h *SyslogHandler) run() error {
 }
 
 func (h *SyslogHandler) shutdown() {
-	logger.Printf("workers served %d", messageCount)
-	logger.Println("stopping syslog server service gracefully ...")
+	log.Infof("workers served %d", messageCount)
+	log.Info("stopping syslog server service gracefully ...")
 	for i := 0; i < h.workers; i++ {
 		wQuit := h.pool
 		close(wQuit)
 	}
 	server.Kill()
-	logger.Println("syslogreceiver has been shutdown")
+	log.Info("syslogreceiver has been shutdown")
 	close(syslogMsgCH)
 }
 
@@ -117,18 +120,18 @@ func (h *SyslogHandler) syslogWorker(wQuit chan struct{}) {
 	if opts.LogDecoderProtocol == "udp" {
 		conn, err = net.Dial("udp", host)
 		if err != nil {
-			logger.Printf("worker could not connect to log decoder: %s\n", err)
+			log.Errorf("worker could not connect to log decoder: %s\n", err)
 			return
 		}
 	} else {
 		conn, err = net.Dial("tcp", host)
 		if err != nil {
-			logger.Printf("worker could not connect to log decoder: %s\n", err)
+			log.Errorf("worker could not connect to log decoder: %s\n", err)
 			return
 		}
 	}
 	defer conn.Close()
-	logger.Printf("worker opened connection to %s/%s\n", opts.LogDecoderProtocol, host)
+	log.Infof("worker opened connection to %s/%s\n", opts.LogDecoderProtocol, host)
 
 LOOP:
 	for {
@@ -148,14 +151,13 @@ LOOP:
 		origmsg := string(matches[0][2])
 
 		msg = "[][][" + orighost + "][" + strconv.FormatInt(time.Now().Unix(), 10) + "][]" + origmsg
-		logger.Printf(msg)
 		atomic.AddUint64(&messageCount, 1)
 		if opts.LogDecoderProtocol == "tcp" {
 			msg = msg + "\n"
 		}
 		_, err := conn.Write([]byte(msg))
 		if err != nil {
-			logger.Printf("worker could not write to log decoder: %s\n", err)
+			log.Errorf("worker could not write to log decoder: %s\n", err)
 		}
 	}
 }

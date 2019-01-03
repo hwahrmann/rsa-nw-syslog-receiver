@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -9,8 +8,7 @@ import (
 )
 
 var (
-	opts   *Options
-	logger *log.Logger
+	opts *Options
 )
 
 type handler interface {
@@ -41,7 +39,7 @@ func main() {
 
 	<-signalCh
 
-	logger.Printf("Stopping Syslog Receiver")
+	opts.Logger.Info("Stopping Syslog Receiver")
 
 	syslogHandler.shutdown()
 }
