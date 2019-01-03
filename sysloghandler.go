@@ -36,7 +36,7 @@ var (
 
 	server       syslog.Server
 	messageCount uint64
-	pattern, _   = regexp.Compile("^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)")
+	pattern      *regexp.Regexp
 )
 
 // NewSyslogHandler constructs a SyslogHandler
@@ -53,6 +53,8 @@ func NewSyslogHandler() *SyslogHandler {
 }
 
 func (h *SyslogHandler) run() error {
+	pattern, _ = regexp.Compile(opts.RegexPattern)
+
 	// Start the Workers
 	for i := 0; i < h.workers; i++ {
 		go func() {

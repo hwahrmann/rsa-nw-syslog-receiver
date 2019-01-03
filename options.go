@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 
 	"github.com/google/logger"
@@ -29,6 +30,7 @@ type Options struct {
 	ListenPort         int    `yaml:"listenport"`
 	Protocol           string `yaml:"listenprotocol"`
 	Workers            int    `yaml:"workers"`
+	RegexPattern       string `yaml:"regexpattern"`
 }
 
 func init() {
@@ -48,7 +50,8 @@ func NewOptions() *Options {
 	options.LogDecoderProtocol = "tcp"
 	options.Protocol = "tcp"
 	options.Workers = 5
-	options.Logger = logger.Init("", false, true, ioutil.Discard)
+	options.Logger = logger.Init("", options.Verbose, true, ioutil.Discard)
+	options.RegexPattern = ""
 	logger.SetFlags(0)
 	return &options
 }
@@ -59,6 +62,15 @@ func GetOptions() *Options {
 
 	opts.syslogreceiverFlagSet()
 	opts.syslogreceiverVersion()
+
+	if opts.RegexPattern == "" {
+		opts.Logger.Fatal("Missing Regex Pattern")
+	}
+
+	_, err := regexp.Compile(opts.RegexPattern)
+	if err != nil {
+		opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
+	}
 
 	if ok := opts.receiverIsRunning(); ok {
 		opts.Logger.Fatal("The Syslog Receiver is already running!")
@@ -123,16 +135,17 @@ func (opts *Options) syslogreceiverFlagSet() {
 	flag.IntVar(&opts.ListenPort, "listenport", opts.ListenPort, "syslogreceiver listening port number")
 	flag.StringVar(&opts.Protocol, "listenprotocol", opts.Protocol, "the protocol to listen for incoming traffic")
 	flag.IntVar(&opts.Workers, "workers", opts.Workers, "the number of workers forwarding messages to the log decoder")
+	flag.StringVar(&opts.RegexPattern, "regexpattern", opts.RegexPattern, "The Regex Pattern to parse sending host and original message")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, `
     Example:
 	# listen on default port tcp/5514
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53
+	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -regexpattern "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
 
 	# specify port and protocol
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -listenport 6514 -listenprotocol udp
+	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -listenport 6514 -listenprotocol udp -regexpattern "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
 	`)
 	}
 
