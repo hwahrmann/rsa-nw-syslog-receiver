@@ -243,7 +243,6 @@ LOOP:
 
 			message := iface.(*Message)
 			msg := "[][][" + message.Host + "][" + strconv.FormatInt(time.Now().Unix(), 10) + "][]" + message.Msg
-			log.Info(msg)
 			if opts.LogDecoderProtocol == "tcp" {
 				msg = msg + "\n"
 			}
