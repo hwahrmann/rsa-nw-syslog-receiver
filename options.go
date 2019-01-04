@@ -30,7 +30,8 @@ type Options struct {
 	ListenPort         int    `yaml:"listenport"`
 	Protocol           string `yaml:"listenprotocol"`
 	Workers            int    `yaml:"workers"`
-	RegexPattern       string `yaml:"regexpattern"`
+	RegexRFC3164       string `yaml:"rfc3164"`
+	RegexRFC5424       string `yaml:"rfc5424"`
 }
 
 func init() {
@@ -51,7 +52,8 @@ func NewOptions() *Options {
 	options.Protocol = "tcp"
 	options.Workers = 5
 	options.Logger = logger.Init("", options.Verbose, true, ioutil.Discard)
-	options.RegexPattern = ""
+	options.RegexRFC3164 = "^[1-9]\\d{0,2} (?P<time>[A-Z][a-z][a-z]\\s{1,2}\\d{1,2}\\s\\d{2}[:]\\d{2}[:]\\d{2})\\s(?P<host>[\\w][\\w\\d\\.@-]*)\\s(?P<message>.*)$"
+	options.RegexRFC5424 = "^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s(?P<extradata>(\\[(.*)\\]|[^ ]))\\s(?P<message>.*)$"
 	logger.SetFlags(0)
 	return &options
 }
@@ -63,11 +65,15 @@ func GetOptions() *Options {
 	opts.syslogreceiverFlagSet()
 	opts.syslogreceiverVersion()
 
-	if opts.RegexPattern == "" {
+	if opts.RegexRFC3164 == "" {
 		opts.Logger.Fatal("Missing Regex Pattern")
 	}
 
-	_, err := regexp.Compile(opts.RegexPattern)
+	_, err := regexp.Compile(opts.RegexRFC3164)
+	if err != nil {
+		opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
+	}
+	_, err = regexp.Compile(opts.RegexRFC5424)
 	if err != nil {
 		opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
 	}
@@ -135,7 +141,8 @@ func (opts *Options) syslogreceiverFlagSet() {
 	flag.IntVar(&opts.ListenPort, "listenport", opts.ListenPort, "syslogreceiver listening port number")
 	flag.StringVar(&opts.Protocol, "listenprotocol", opts.Protocol, "the protocol to listen for incoming traffic")
 	flag.IntVar(&opts.Workers, "workers", opts.Workers, "the number of workers forwarding messages to the log decoder")
-	flag.StringVar(&opts.RegexPattern, "regexpattern", opts.RegexPattern, "The Regex Pattern to parse sending host and original message")
+	flag.StringVar(&opts.RegexRFC3164, "rfc3164", opts.RegexRFC3164, "The Regex Pattern to parse RFC3164 for sending host and message")
+	flag.StringVar(&opts.RegexRFC5424, "rfc5424", opts.RegexRFC5424, "The Regex Pattern to parse RFC5424 for sending host and message")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()

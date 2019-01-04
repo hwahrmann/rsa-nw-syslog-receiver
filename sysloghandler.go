@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/logger"
+	"github.com/joncrlsn/dque"
 	"gopkg.in/mcuadros/go-syslog.v2"
 )
 
@@ -26,6 +27,7 @@ var (
 	log *logger.Logger
 
 	syslogMsgCH = make(chan string, 2000)
+	stopSender  = make(chan struct{})
 
 	// fluentd payload
 	syslogBuffer = &sync.Pool{
@@ -36,8 +38,28 @@ var (
 
 	server       syslog.Server
 	messageCount uint64
-	pattern      *regexp.Regexp
+	pattern3164  *regexp.Regexp
+	pattern5424  *regexp.Regexp
+	queue        *dque.DQue
 )
+
+const (
+	queueName = "syslogreceiver"
+	queueDir  = "/tmp"
+	queueSize = 100
+)
+
+// Message is what we'll be storing in the queue.
+type Message struct {
+	Host string
+	Msg  string
+}
+
+// MessageBuilder creates a new Message and returns a pointer to it.
+// This is used when we load a segment of the queue from disk.
+func MessageBuilder() interface{} {
+	return &Message{}
+}
 
 // NewSyslogHandler constructs a SyslogHandler
 func NewSyslogHandler() *SyslogHandler {
@@ -53,9 +75,20 @@ func NewSyslogHandler() *SyslogHandler {
 }
 
 func (h *SyslogHandler) run() error {
-	pattern, _ = regexp.Compile(opts.RegexPattern)
 
-	// Start the Workers
+	// Compile the Regex Pattern
+	pattern3164, _ = regexp.Compile(opts.RegexRFC3164)
+	pattern5424, _ = regexp.Compile(opts.RegexRFC5424)
+
+	// Create the Queue to store the messages
+	var err error
+	queue, err = dque.NewOrOpen(queueName, queueDir, queueSize, MessageBuilder)
+	if err != nil {
+		log.Fatal("Error creating new dque ", err)
+	}
+	log.Infof("Queue Size: %d", queue.Size())
+
+	// Start the Receiver Workers
 	for i := 0; i < h.workers; i++ {
 		go func() {
 			wQuit := make(chan struct{})
@@ -63,6 +96,9 @@ func (h *SyslogHandler) run() error {
 			h.syslogWorker(wQuit)
 		}()
 	}
+
+	// Start the Sender
+	go syslogSender(queue)
 
 	// Setup the Syslog Server
 	channel := make(syslog.LogPartsChannel)
@@ -78,7 +114,7 @@ func (h *SyslogHandler) run() error {
 		server.ListenTCP(addr)
 	}
 
-	err := server.Boot()
+	err = server.Boot()
 	if err != nil {
 		log.Errorf("Error starting Syslog Server: %s", err)
 		return errors.New("Error starting Syslog Server")
@@ -98,42 +134,25 @@ func (h *SyslogHandler) run() error {
 }
 
 func (h *SyslogHandler) shutdown() {
-	log.Infof("workers served %d", messageCount)
-	log.Info("stopping syslog server service gracefully ...")
+	log.Infof("Workers received %d messages", messageCount)
+	log.Info("Stopping syslog server service gracefully ...")
 	for i := 0; i < h.workers; i++ {
 		wQuit := h.pool
 		close(wQuit)
 	}
 	server.Kill()
-	log.Info("syslogreceiver has been shutdown")
+	log.Info("Syslogreceiver has been shutdown")
 	close(syslogMsgCH)
+	close(stopSender)
 }
 
 func (h *SyslogHandler) syslogWorker(wQuit chan struct{}) {
 	var (
-		msg string
-		ok  bool
+		msg      string
+		ok       bool
+		orighost string
+		origmsg  string
 	)
-
-	//Setup network connection
-	host := h.logdecoder + ":514"
-	var conn net.Conn
-	var err error
-	if opts.LogDecoderProtocol == "udp" {
-		conn, err = net.Dial("udp", host)
-		if err != nil {
-			log.Errorf("worker could not connect to log decoder: %s\n", err)
-			return
-		}
-	} else {
-		conn, err = net.Dial("tcp", host)
-		if err != nil {
-			log.Errorf("worker could not connect to log decoder: %s\n", err)
-			return
-		}
-	}
-	defer conn.Close()
-	log.Infof("worker opened connection to %s/%s\n", opts.LogDecoderProtocol, host)
 
 LOOP:
 	for {
@@ -148,18 +167,90 @@ LOOP:
 		}
 
 		// extract sender and original message
-		matches := pattern.FindAllSubmatch([]byte(msg), -1)
-		orighost := string(matches[0][1])
-		origmsg := string(matches[0][2])
-
-		msg = "[][][" + orighost + "][" + strconv.FormatInt(time.Now().Unix(), 10) + "][]" + origmsg
-		atomic.AddUint64(&messageCount, 1)
-		if opts.LogDecoderProtocol == "tcp" {
-			msg = msg + "\n"
+		var m map[string]string
+		matches := pattern3164.FindAllStringSubmatch(msg, -1)
+		if matches != nil {
+			m = findNamedMatches(pattern3164, matches)
+			orighost = m["host"]
+			origmsg = msg[2:]
+		} else {
+			matches = pattern5424.FindAllStringSubmatch(msg, -1)
+			if matches != nil {
+				m = findNamedMatches(pattern5424, matches)
+				orighost = m["host"]
+				origmsg = m["message"]
+			}
 		}
-		_, err := conn.Write([]byte(msg))
+		atomic.AddUint64(&messageCount, 1)
+
+		// Add an item to the queue
+		if err := queue.Enqueue(&Message{orighost, origmsg}); err != nil {
+			log.Fatal("Error enqueueing item ", err)
+		}
+	}
+}
+
+func findNamedMatches(regex *regexp.Regexp, matches [][]string) map[string]string {
+	results := map[string]string{}
+	for i, name := range matches[0] {
+		results[regex.SubexpNames()[i]] = name
+	}
+	return results
+}
+
+func syslogSender(queue *dque.DQue) {
+	var (
+		conn  net.Conn
+		err   error
+		iface interface{}
+	)
+
+	//Setup network connection
+	host := opts.LogDecoder + ":514"
+	if opts.LogDecoderProtocol == "udp" {
+		conn, err = net.Dial("udp", host)
 		if err != nil {
-			log.Errorf("worker could not write to log decoder: %s\n", err)
+			log.Errorf("Worker could not connect to log decoder: %s\n", err)
+			return
+		}
+	} else {
+		conn, err = net.Dial("tcp", host)
+		if err != nil {
+			log.Errorf("Worker could not connect to log decoder: %s\n", err)
+			return
+		}
+	}
+	defer conn.Close()
+	log.Infof("Worker opened connection to %s/%s\n", opts.LogDecoderProtocol, host)
+
+LOOP:
+	for {
+		select {
+		case <-stopSender:
+			log.Info("Stopping Syslog Sender")
+			break LOOP
+		default:
+			// Dequeue the next message in the queue
+			if iface, err = queue.Dequeue(); err != nil && err != dque.ErrEmpty {
+				log.Fatal("Error dequeuing item:", err)
+			}
+
+			// On an empty queue sleep 1 second before rerying
+			if err == dque.ErrEmpty {
+				time.Sleep(1000 * time.Millisecond)
+				continue
+			}
+
+			message := iface.(*Message)
+			msg := "[][][" + message.Host + "][" + strconv.FormatInt(time.Now().Unix(), 10) + "][]" + message.Msg
+			log.Info(msg)
+			if opts.LogDecoderProtocol == "tcp" {
+				msg = msg + "\n"
+			}
+			_, err = conn.Write([]byte(msg))
+			if err != nil {
+				log.Errorf("worker could not write to log decoder: %s\n", err)
+			}
 		}
 	}
 }
