@@ -205,6 +205,7 @@ func syslogSender(queue *dque.DQue) {
 		iface interface{}
 	)
 
+	log.Infof("Starting Syslog Sender qith Queue Size of %d", queue.Size())
 	//Setup network connection
 	host := opts.LogDecoder + ":514"
 	if opts.LogDecoderProtocol == "udp" {
@@ -217,6 +218,8 @@ func syslogSender(queue *dque.DQue) {
 		conn, err = net.Dial("tcp", host)
 		if err != nil {
 			log.Errorf("Worker could not connect to log decoder: %s\n", err)
+			log.Info("Leaving Sylog Sender")
+			go checkConnection()
 			return
 		}
 	}
@@ -249,7 +252,26 @@ LOOP:
 			_, err = conn.Write([]byte(msg))
 			if err != nil {
 				log.Errorf("worker could not write to log decoder: %s\n", err)
+				go checkConnection()
+				break LOOP
 			}
 		}
+	}
+}
+
+func checkConnection() {
+	log.Info("Starting connection check for Log Decoder")
+	host := opts.LogDecoder + ":514"
+	for {
+		tcpAddr, _ := net.ResolveTCPAddr("tcp", host)
+		conn, err := net.DialTCP("tcp", nil, tcpAddr)
+		if err != nil {
+			time.Sleep(5000 * time.Millisecond)
+			continue
+		}
+		conn.Close()
+		go syslogSender(queue)
+		log.Info("Log Decoder capture interface up")
+		break
 	}
 }
