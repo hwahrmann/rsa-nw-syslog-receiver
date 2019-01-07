@@ -12,6 +12,7 @@ import (
 	"github.com/google/logger"
 	"github.com/joncrlsn/dque"
 	"gopkg.in/mcuadros/go-syslog.v2"
+	"gopkg.in/mcuadros/go-syslog.v2/format"
 )
 
 // SyslogHandler Represents a SyslogHandler
@@ -26,7 +27,7 @@ type SyslogHandler struct {
 var (
 	log *logger.Logger
 
-	syslogMsgCH = make(chan string, 2000)
+	syslogMsgCH = make(chan format.LogParts)
 	stopSender  = make(chan struct{})
 
 	// fluentd payload
@@ -39,12 +40,14 @@ var (
 	server       syslog.Server
 	messageCount uint64
 	pattern3164  *regexp.Regexp
-	pattern5424  *regexp.Regexp
-	queue        *dque.DQue
+
+	pattern5424 *regexp.Regexp
+	queue       *dque.DQue
 )
 
 const (
 	queueName = "syslogreceiver"
+
 	queueDir  = "/tmp"
 	queueSize = 100
 )
@@ -76,12 +79,12 @@ func NewSyslogHandler() *SyslogHandler {
 
 func (h *SyslogHandler) run() error {
 
+	var err error
 	// Compile the Regex Pattern
 	pattern3164, _ = regexp.Compile(opts.RegexRFC3164)
 	pattern5424, _ = regexp.Compile(opts.RegexRFC5424)
 
 	// Create the Queue to store the messages
-	var err error
 	queue, err = dque.NewOrOpen(queueName, queueDir, queueSize, MessageBuilder)
 	if err != nil {
 		log.Fatal("Error creating new dque ", err)
@@ -122,11 +125,11 @@ func (h *SyslogHandler) run() error {
 
 	go func(channel syslog.LogPartsChannel) {
 		for logParts := range channel {
-			syslogMsgCH <- logParts["content"].(string)
+			syslogMsgCH <- logParts
 		}
 	}(channel)
 
-	log.Infof("Syslog Receiver is running (listening on [::]:%s/%d workers#: %d)", h.listenProtocol, h.listenPort, h.workers)
+	log.Infof("Syslog Receiver is running (listening on [::]:string%s/%d workers#: %d)", h.listenProtocol, h.listenPort, h.workers)
 
 	server.Wait()
 
@@ -148,10 +151,11 @@ func (h *SyslogHandler) shutdown() {
 
 func (h *SyslogHandler) syslogWorker(wQuit chan struct{}) {
 	var (
-		msg      string
-		ok       bool
-		orighost string
-		origmsg  string
+		syslogmsg format.LogParts
+		msg       string
+		ok        bool
+		orighost  string
+		origmsg   string
 	)
 
 LOOP:
@@ -160,12 +164,15 @@ LOOP:
 		select {
 		case <-wQuit:
 			break LOOP
-		case msg, ok = <-syslogMsgCH:
+		case syslogmsg, ok = <-syslogMsgCH:
 			if !ok {
 				break LOOP
 			}
 		}
 
+		msg = syslogmsg["content"].(string)
+		orighost = syslogmsg["hostname"].(string)
+		origmsg = msg
 		// extract sender and original message
 		var m map[string]string
 		matches := pattern3164.FindAllStringSubmatch(msg, -1)
@@ -238,7 +245,7 @@ LOOP:
 				log.Fatal("Error dequeuing item:", err)
 			}
 
-			// On an empty queue sleep 1 second before rerying
+			// On an empty queue sleeLogpartsp 1 second before rerying
 			if err == dque.ErrEmpty {
 				time.Sleep(1000 * time.Millisecond)
 				continue
