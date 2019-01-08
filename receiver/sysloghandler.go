@@ -42,7 +42,15 @@ type SyslogHandler struct {
 	listenProtocol string
 	logdecoder     string
 	workers        int
+	stats          SyslogStats
 	pool           chan chan struct{}
+}
+
+// SyslogStats represents syslogreceiver stats
+type SyslogStats struct {
+	QueueCount int
+	Events     uint64
+	Workers    int
 }
 
 var (
@@ -58,9 +66,8 @@ var (
 		},
 	}
 
-	server       syslog.Server
-	messageCount uint64
-	pattern3164  *regexp.Regexp
+	server      syslog.Server
+	pattern3164 *regexp.Regexp
 
 	pattern5424 *regexp.Regexp
 	queue       *dque.DQue
@@ -95,6 +102,14 @@ func NewSyslogHandler() *SyslogHandler {
 		logdecoder:     opts.LogDecoder,
 		workers:        opts.Workers,
 		pool:           make(chan chan struct{}, maxWorkers),
+	}
+}
+
+func (h *SyslogHandler) status() *SyslogStats {
+	return &SyslogStats{
+		QueueCount: queue.Size(),
+		Events:     atomic.LoadUint64(&h.stats.Events),
+		Workers:    h.workers,
 	}
 }
 
@@ -158,7 +173,7 @@ func (h *SyslogHandler) run() error {
 }
 
 func (h *SyslogHandler) shutdown() {
-	log.Infof("Workers received %d messages", messageCount)
+	log.Infof("Workers received %d messages", &h.stats.Events)
 	log.Info("Stopping syslog server service gracefully ...")
 	for i := 0; i < h.workers; i++ {
 		wQuit := h.pool
@@ -209,7 +224,7 @@ LOOP:
 				origmsg = m["message"]
 			}
 		}
-		atomic.AddUint64(&messageCount, 1)
+		atomic.AddUint64(&h.stats.Events, 1)
 
 		// Add an item to the queue
 		if err := queue.Enqueue(&Message{orighost, origmsg}); err != nil {
@@ -233,7 +248,7 @@ func syslogSender(queue *dque.DQue) {
 		iface interface{}
 	)
 
-	log.Infof("Starting Syslog Sender qith Queue Size of %d", queue.Size())
+	log.Infof("Starting Syslog Sender with a Queue Size of %d", queue.Size())
 	//Setup network connection
 	host := opts.LogDecoder + ":514"
 	if opts.LogDecoderProtocol == "udp" {

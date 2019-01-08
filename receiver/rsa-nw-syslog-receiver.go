@@ -58,6 +58,8 @@ func main() {
 		}
 	}(syslogHandler)
 
+	go statsHTTPServer(syslogHandler)
+
 	<-signalCh
 
 	opts.Logger.Info("Stopping Syslog Receiver")

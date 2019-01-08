@@ -46,6 +46,8 @@ type Options struct {
 	PIDFile            string `yaml:"pid-file"`
 	Logger             *logger.Logger
 	version            bool
+	StatsEnabled       bool
+	StatsHTTPPort      int
 	LogDecoder         string `yaml:"logdecoder"`
 	LogDecoderProtocol string `yaml:"logdecoderprotocol"`
 	ListenPort         int    `yaml:"listenport"`
@@ -75,6 +77,8 @@ func NewOptions() *Options {
 	options.Logger = logger.Init("", options.Verbose, true, ioutil.Discard)
 	options.RegexRFC3164 = "(?P<time>[A-Z][a-z][a-z]\\s{1,2}\\d{1,2}\\s\\d{2}[:]\\d{2}[:]\\d{2})\\s(?P<host>[\\w][\\w\\d\\.@-]*)\\s(?P<message>.*)$"
 	options.RegexRFC5424 = "^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s?(?P<extradata>(\\[(.*)\\]|[^ ]))?\\s(?P<message>.*)$"
+	options.StatsEnabled = true
+	options.StatsHTTPPort = 8081
 	logger.SetFlags(0)
 	return &options
 }
@@ -164,6 +168,8 @@ func (opts *Options) syslogreceiverFlagSet() {
 	flag.IntVar(&opts.Workers, "workers", opts.Workers, "the number of workers forwarding messages to the log decoder")
 	flag.StringVar(&opts.RegexRFC3164, "rfc3164", opts.RegexRFC3164, "The Regex Pattern to parse RFC3164 for sending host and message")
 	flag.StringVar(&opts.RegexRFC5424, "rfc5424", opts.RegexRFC5424, "The Regex Pattern to parse RFC5424 for sending host and message")
+	flag.BoolVar(&opts.StatsEnabled, "stats-enabled", opts.StatsEnabled, "enable REST interface for status query")
+	flag.IntVar(&opts.StatsHTTPPort, "stats-http-port", opts.StatsHTTPPort, "The Listen Port for the REST Interface")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
