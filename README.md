@@ -1,3 +1,5 @@
+# Summary
+
 When Syslog events are forwarded to RSA Netwitness by a Syslog Relay Server, and the
 Relay Server cannot rewrite the Sender address, usually only available via UDP, it looks
 like all events are coming from the same host, namely the Relay Server.
@@ -27,7 +29,7 @@ Options are specified as command line arguments or via Configuration file.
 - Collection of RFC3164 and RFC5424 syslog formats
 - Forwarding of events to RSA Netwitness
 - Buffering of events in case of RSA Netwitness infrastructure downtime
-- Multiple Worker to allow concurrent processing of events 
+- Multiple Worker to allow concurrent processing of events
 - Simple REST interface for stats
 
 
