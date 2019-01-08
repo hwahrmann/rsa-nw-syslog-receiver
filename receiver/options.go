@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	version    string
+	version    = "1.0"
 	maxWorkers = runtime.NumCPU() * 1e4
 )
 
@@ -67,7 +67,6 @@ func init() {
 func NewOptions() *Options {
 	options := Options{}
 	options.Verbose = false
-	options.version = false
 	options.PIDFile = "/var/run/rsa-nw-syslog-receiver.pid"
 	options.ListenPort = 5514
 	options.LogDecoder = "127.0.0.1"
@@ -89,10 +88,6 @@ func GetOptions() *Options {
 
 	opts.syslogreceiverFlagSet()
 	opts.syslogreceiverVersion()
-
-	if opts.RegexRFC3164 == "" {
-		opts.Logger.Fatal("Missing Regex Pattern")
-	}
 
 	_, err := regexp.Compile(opts.RegexRFC3164)
 	if err != nil {
@@ -176,16 +171,17 @@ func (opts *Options) syslogreceiverFlagSet() {
 		fmt.Fprintf(os.Stderr, `
     Example:
 	# listen on default port tcp/5514
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -regexpattern "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
+	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -rfc3164 "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
 
 	# specify port and protocol
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -listenport 6514 -listenprotocol udp -regexpattern "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
+	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -listenport 6514 -listenprotocol udp -rfc3164 "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
 	`)
 	}
 
 	flag.Parse()
 }
 
+// Load the configuration from the config file
 func syslogreceiverLoadCfg(opts *Options) {
 	var file = "/etc/syslogreceiver/syslogreceiver.conf"
 

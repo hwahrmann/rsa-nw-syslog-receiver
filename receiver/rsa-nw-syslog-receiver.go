@@ -19,12 +19,12 @@
 //: limitations under the License.
 //: ----------------------------------------------------------------------------
 
+// Package main is the rsa-nw-syslog-receiver binary
 package main
 
 import (
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 )
 
@@ -39,19 +39,18 @@ type handler interface {
 
 func main() {
 	var (
-		wg       sync.WaitGroup
 		signalCh = make(chan os.Signal, 1)
 	)
 
+	// Retrieve the Optons
 	opts = GetOptions()
 
+	// Notify on SIGINT and SIGTERM
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
 	syslogHandler := NewSyslogHandler()
-	wg.Add(1)
 
 	go func(syslogHandler handler) {
-		defer wg.Done()
 		err := syslogHandler.run()
 		if err != nil {
 			close(signalCh)

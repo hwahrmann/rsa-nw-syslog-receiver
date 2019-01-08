@@ -26,7 +26,6 @@ import (
 	"net"
 	"regexp"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -59,18 +58,11 @@ var (
 	syslogMsgCH = make(chan format.LogParts)
 	stopSender  = make(chan struct{})
 
-	// fluentd payload
-	syslogBuffer = &sync.Pool{
-		New: func() interface{} {
-			return make([]byte, 15000)
-		},
-	}
-
 	server      syslog.Server
 	pattern3164 *regexp.Regexp
-
 	pattern5424 *regexp.Regexp
-	queue       *dque.DQue
+
+	queue *dque.DQue
 )
 
 const (
@@ -159,19 +151,21 @@ func (h *SyslogHandler) run() error {
 		return errors.New("Error starting Syslog Server")
 	}
 
+	// Start receiver thread
 	go func(channel syslog.LogPartsChannel) {
 		for logParts := range channel {
 			syslogMsgCH <- logParts
 		}
 	}(channel)
 
-	log.Infof("Syslog Receiver is running (listening on [::]:string%s/%d workers#: %d)", h.listenProtocol, h.listenPort, h.workers)
+	log.Infof("Syslog Receiver is running (listening on [::]:%d/%s workers#: %d)", h.listenPort, h.listenProtocol, h.workers)
 
 	server.Wait()
 
 	return nil
 }
 
+// Shutdown the Syslog Receiver
 func (h *SyslogHandler) shutdown() {
 	log.Infof("Workers received %d messages", &h.stats.Events)
 	log.Info("Stopping syslog server service gracefully ...")
@@ -185,6 +179,7 @@ func (h *SyslogHandler) shutdown() {
 	close(stopSender)
 }
 
+// Worker, which receives Syslog Events and Queues the message
 func (h *SyslogHandler) syslogWorker(wQuit chan struct{}) {
 	var (
 		syslogmsg format.LogParts
@@ -206,6 +201,7 @@ LOOP:
 			}
 		}
 
+		// As a fallback the message and host as received by the relay is stored
 		msg = syslogmsg["content"].(string)
 		orighost = syslogmsg["hostname"].(string)
 		origmsg = msg
@@ -233,6 +229,7 @@ LOOP:
 	}
 }
 
+// Map all the Submatches
 func findNamedMatches(regex *regexp.Regexp, matches [][]string) map[string]string {
 	results := map[string]string{}
 	for i, name := range matches[0] {
@@ -241,6 +238,7 @@ func findNamedMatches(regex *regexp.Regexp, matches [][]string) map[string]strin
 	return results
 }
 
+// This Worker extracts messages from the queue and sends them to RSA Netwitness
 func syslogSender(queue *dque.DQue) {
 	var (
 		conn  net.Conn
@@ -295,6 +293,7 @@ LOOP:
 			_, err = conn.Write([]byte(msg))
 			if err != nil {
 				log.Errorf("worker could not write to log decoder: %s\n", err)
+				// Check for decoder coming up again and leave worker
 				go checkConnection()
 				break LOOP
 			}
@@ -302,6 +301,7 @@ LOOP:
 	}
 }
 
+// Check for Log Decoder capturing again
 func checkConnection() {
 	log.Info("Starting connection check for Log Decoder")
 	host := opts.LogDecoder + ":514"
@@ -313,6 +313,7 @@ func checkConnection() {
 			continue
 		}
 		conn.Close()
+		// Start Sender Worker
 		go syslogSender(queue)
 		log.Info("Log Decoder capture interface up")
 		break
