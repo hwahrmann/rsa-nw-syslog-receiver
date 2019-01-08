@@ -50,10 +50,10 @@ while a RFC5424 event is parsed as:
 ```
 ^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s?(?P<extradata>(\\[(.*)\\]|[^ ]))?\\s(?P<message>.*)$
 ```
-Please note that the "\" needs to be escaped using "\\".
+Please note that the "\\" needs to be escaped using "\\\\".
 
 If a custom Regex pattern is used in the config file, it is important to have 2 named groups:
 "<host>" specifies the original Sender
 "<message>" specifies the original messages
 
-If the specified Regex pattern does not match, the message is forwarded as-is, with the Syslog Relay Server as the originating host. 
+If the specified Regex pattern does not match, the message is forwarded as-is, with the Syslog Relay Server as the originating host.
