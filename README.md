@@ -39,6 +39,42 @@ Options are specified as command line arguments or via Configuration file.
 ## Supported platform
 - Linux
 
+## Build
+Given that the Go Language compiler (version 1.11 or aboce preferred) is installed, you can build it with:
+```
+go get github.com/hwahrmann/rsa-nw-syslog-receiver
+cd $GOPATH/src/github.com/hwahrmann/rsa-nw-syslog-receiver
+
+make build
+```
+The binary is then in the subfolder named receiver.
+
+To check the version:
+```
+./rsa-nw-syslog-receiver -version
+```
+
+Altough you could specify parameters, like described in [Configuration](/docs/config.md), it is best to create a config file, a sample is in the conf folder, and star it like this:
+```
+./rsa-nw-syslog-receiver -config myconfig.conf
+```
+
+## Installation
+You can download and install a pre-built rpm package as below ([RPM](https://github.com/hwahrmann/rsa-nw-syslog-receiver/releases)).
+
+```
+yum localinstall rsa-nw-syslog-receiver-1.0.0-1.x86_64.rpm
+```
+
+Once you installed you need to configure some basic parameters, for more information check [[Configuration](/docs/config.md):
+```
+/etc/syslogreceiver/syslogreceiver.conf
+```
+You can start the service by the below:
+```
+service rsa-nw-syslog-receiver start
+```
+
 ## License
 Licensed under the Apache License, Version 2.0 (the "License")
 

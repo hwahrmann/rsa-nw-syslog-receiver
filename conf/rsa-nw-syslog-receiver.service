@@ -1,0 +1,16 @@
+[Unit]
+Description=Syslog Receiver
+
+[Service]
+ExecStart=/usr/local/bin/rsa-nw-syslog-receiver
+Restart=always
+StartLimitInterval=300
+StartLimitBurst=10
+StandardOutput=null
+TimeoutStopSec=600
+LimitCORE=infinity
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+
