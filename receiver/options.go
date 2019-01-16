@@ -35,8 +35,10 @@ import (
 )
 
 var (
-	version    = "1.0"
-	maxWorkers = runtime.NumCPU() * 1e4
+	version      = "1.0"
+	maxWorkers   = runtime.NumCPU() * 1e4
+	regexRFC3164 = "^(?P<message>(?P<time>[A-Z][a-z][a-z]\\s{1,2}\\d{1,2}\\s\\d{2}[:]\\d{2}[:]\\d{2})\\s(?P<host>[\\w][\\w\\d\\.@-]*)\\s.*)$"
+	regexRFC5424 = "^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s?(?P<extradata>(\\[(.*)\\]|[^ ]))?\\s(?P<message>.*)$"
 )
 
 // Options represents options
@@ -48,13 +50,19 @@ type Options struct {
 	version            bool
 	StatsEnabled       bool
 	StatsHTTPPort      int
-	LogDecoder         string `yaml:"logdecoder"`
-	LogDecoderProtocol string `yaml:"logdecoderprotocol"`
-	ListenPort         int    `yaml:"listenport"`
-	Protocol           string `yaml:"listenprotocol"`
-	Workers            int    `yaml:"workers"`
-	RegexRFC3164       string `yaml:"rfc3164"`
-	RegexRFC5424       string `yaml:"rfc5424"`
+	LogDecoder         string   `yaml:"logdecoder"`
+	LogDecoderProtocol string   `yaml:"logdecoderprotocol"`
+	ListenPort         int      `yaml:"listenport"`
+	Protocol           string   `yaml:"listenprotocol"`
+	Workers            int      `yaml:"workers"`
+	Search             []Search `yaml:"search"`
+}
+
+// Search represents a Search structure
+type Search struct {
+	Regex   string
+	Type    string
+	Mapping []string
 }
 
 func init() {
@@ -74,8 +82,6 @@ func NewOptions() *Options {
 	options.Protocol = "tcp"
 	options.Workers = 5
 	options.Logger = logger.Init("", options.Verbose, true, ioutil.Discard)
-	options.RegexRFC3164 = "^(?P<time>[A-Z][a-z][a-z]\\s{1,2}\\d{1,2}\\s\\d{2}[:]\\d{2}[:]\\d{2})\\s(?P<host>[\\w][\\w\\d\\.@-]*)\\s(?P<message>.*)$"
-	options.RegexRFC5424 = "^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s?(?P<extradata>(\\[(.*)\\]|[^ ]))?\\s(?P<message>.*)$"
 	options.StatsEnabled = true
 	options.StatsHTTPPort = 8081
 	logger.SetFlags(0)
@@ -89,13 +95,12 @@ func GetOptions() *Options {
 	opts.syslogreceiverFlagSet()
 	opts.syslogreceiverVersion()
 
-	_, err := regexp.Compile(opts.RegexRFC3164)
-	if err != nil {
-		opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
-	}
-	_, err = regexp.Compile(opts.RegexRFC5424)
-	if err != nil {
-		opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
+	var err error
+	for _, search := range opts.Search {
+		_, err = regexp.Compile(search.Regex)
+		if err != nil {
+			opts.Logger.Fatalf("Error in Regex Pattern: %s", err)
+		}
 	}
 
 	if ok := opts.receiverIsRunning(); ok {
@@ -161,8 +166,6 @@ func (opts *Options) syslogreceiverFlagSet() {
 	flag.IntVar(&opts.ListenPort, "listenport", opts.ListenPort, "syslogreceiver listening port number")
 	flag.StringVar(&opts.Protocol, "listenprotocol", opts.Protocol, "the protocol to listen for incoming traffic")
 	flag.IntVar(&opts.Workers, "workers", opts.Workers, "the number of workers forwarding messages to the log decoder")
-	flag.StringVar(&opts.RegexRFC3164, "rfc3164", opts.RegexRFC3164, "The Regex Pattern to parse RFC3164 for sending host and message")
-	flag.StringVar(&opts.RegexRFC5424, "rfc5424", opts.RegexRFC5424, "The Regex Pattern to parse RFC5424 for sending host and message")
 	flag.BoolVar(&opts.StatsEnabled, "stats-enabled", opts.StatsEnabled, "enable REST interface for status query")
 	flag.IntVar(&opts.StatsHTTPPort, "stats-http-port", opts.StatsHTTPPort, "The Listen Port for the REST Interface")
 
@@ -201,4 +204,15 @@ func syslogreceiverLoadCfg(opts *Options) {
 	if err != nil {
 		opts.Logger.Info(err)
 	}
+
+	// Check, if we have only the default searches
+	if len(opts.Search) == 0 {
+		opts.Logger.Info("No Search strings found. Using default Syslog Regex")
+	}
+
+	// Adding the default regexes to the end
+	s := Search{Regex: regexRFC3164, Type: "syslog"}
+	opts.Search = append(opts.Search, s)
+	s = Search{Regex: regexRFC5424, Type: "syslog"}
+	opts.Search = append(opts.Search, s)
 }

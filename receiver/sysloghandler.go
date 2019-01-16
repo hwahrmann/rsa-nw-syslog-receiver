@@ -58,9 +58,8 @@ var (
 	syslogMsgCH = make(chan format.LogParts)
 	stopSender  = make(chan struct{})
 
-	server      syslog.Server
-	pattern3164 *regexp.Regexp
-	pattern5424 *regexp.Regexp
+	server   syslog.Server
+	patterns []*regexp.Regexp
 
 	queue *dque.DQue
 )
@@ -107,10 +106,18 @@ func (h *SyslogHandler) status() *SyslogStats {
 
 func (h *SyslogHandler) run() error {
 
-	var err error
+	var (
+		err error
+		p   *regexp.Regexp
+	)
+
 	// Compile the Regex Pattern
-	pattern3164, _ = regexp.Compile(opts.RegexRFC3164)
-	pattern5424, _ = regexp.Compile(opts.RegexRFC5424)
+	for _, search := range opts.Search {
+		p, err = regexp.Compile(search.Regex)
+		if err == nil {
+			patterns = append(patterns, p)
+		}
+	}
 
 	// Create the Queue to store the messages
 	queue, err = dque.NewOrOpen(queueName, queueDir, queueSize, MessageBuilder)
@@ -206,18 +213,18 @@ LOOP:
 		orighost = syslogmsg["hostname"].(string)
 		origmsg = msg
 		// extract sender and original message
-		var m map[string]string
-		matches := pattern3164.FindAllStringSubmatch(msg, -1)
-		if matches != nil {
-			m = findNamedMatches(pattern3164, matches)
-			orighost = m["host"]
-			origmsg = msg[2:]
-		} else {
-			matches = pattern5424.FindAllStringSubmatch(msg, -1)
+		var (
+			m       map[string]string
+			matches [][]string
+		)
+
+		for _, pattern := range patterns {
+			matches = pattern.FindAllStringSubmatch(msg, -1)
 			if matches != nil {
-				m = findNamedMatches(pattern5424, matches)
+				m = findNamedMatches(pattern, matches)
 				orighost = m["host"]
 				origmsg = m["message"]
+				break
 			}
 		}
 		atomic.AddUint64(&h.stats.Events, 1)
