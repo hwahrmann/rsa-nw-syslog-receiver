@@ -30,9 +30,8 @@ import (
 	"time"
 
 	"github.com/google/logger"
+	"github.com/hwahrmann/rsa-nw-syslog-receiver/syslog"
 	"github.com/joncrlsn/dque"
-	"gopkg.in/mcuadros/go-syslog.v2"
-	"gopkg.in/mcuadros/go-syslog.v2/format"
 )
 
 // SyslogHandler Represents a SyslogHandler
@@ -55,7 +54,7 @@ type SyslogStats struct {
 var (
 	log *logger.Logger
 
-	syslogMsgCH = make(chan format.LogParts)
+	syslogMsgCH = make(chan syslog.LogParts)
 	stopSender  = make(chan struct{})
 
 	server   syslog.Server
@@ -73,6 +72,7 @@ const (
 
 // Message is what we'll be storing in the queue.
 type Message struct {
+	Time string
 	Host string
 	Msg  string
 }
@@ -144,7 +144,6 @@ func (h *SyslogHandler) run() error {
 
 	addr := "0.0.0.0:" + strconv.Itoa(h.listenPort)
 	server := syslog.NewServer()
-	server.SetFormat(syslog.RFC3164)
 	server.SetHandler(handler)
 	if h.listenProtocol == "udp" {
 		server.ListenUDP(addr)
@@ -189,11 +188,8 @@ func (h *SyslogHandler) shutdown() {
 // Worker, which receives Syslog Events and Queues the message
 func (h *SyslogHandler) syslogWorker(wQuit chan struct{}) {
 	var (
-		syslogmsg format.LogParts
-		msg       string
+		syslogmsg syslog.LogParts
 		ok        bool
-		orighost  string
-		origmsg   string
 	)
 
 LOOP:
@@ -208,29 +204,13 @@ LOOP:
 			}
 		}
 
-		// As a fallback the message and host as received by the relay is stored
-		msg = syslogmsg["content"].(string)
-		orighost = syslogmsg["hostname"].(string)
-		origmsg = msg
-		// extract sender and original message
-		var (
-			m       map[string]string
-			matches [][]string
-		)
-
-		for _, pattern := range patterns {
-			matches = pattern.FindAllStringSubmatch(msg, -1)
-			if matches != nil {
-				m = findNamedMatches(pattern, matches)
-				orighost = m["host"]
-				origmsg = m["message"]
-				break
-			}
-		}
 		atomic.AddUint64(&h.stats.Events, 1)
 
+		time := strconv.FormatInt(syslogmsg["timestamp"].(time.Time).Unix(), 10)
+		host := syslogmsg["hostname"].(string)
+		msg := syslogmsg["content"].(string)
 		// Add an item to the queue
-		if err := queue.Enqueue(&Message{orighost, origmsg}); err != nil {
+		if err := queue.Enqueue(&Message{time, host, msg}); err != nil {
 			log.Fatal("Error enqueueing item ", err)
 		}
 	}
@@ -248,9 +228,12 @@ func findNamedMatches(regex *regexp.Regexp, matches [][]string) map[string]strin
 // This Worker extracts messages from the queue and sends them to RSA Netwitness
 func syslogSender(queue *dque.DQue) {
 	var (
-		conn  net.Conn
-		err   error
-		iface interface{}
+		conn     net.Conn
+		err      error
+		iface    interface{}
+		msg      string
+		orighost string
+		origmsg  string
 	)
 
 	log.Infof("Starting Syslog Sender with a Queue Size of %d", queue.Size())
@@ -293,7 +276,28 @@ LOOP:
 			}
 
 			message := iface.(*Message)
-			msg := "[][][" + message.Host + "][" + strconv.FormatInt(time.Now().Unix(), 10) + "][]" + message.Msg
+
+			// As a fallback the message and host as received by the relay is stored
+			msg = message.Msg
+			orighost = message.Host
+			origmsg = msg
+			// extract sender and original message
+			var (
+				m       map[string]string
+				matches [][]string
+			)
+
+			for _, pattern := range patterns {
+				matches = pattern.FindAllStringSubmatch(msg, -1)
+				if matches != nil {
+					m = findNamedMatches(pattern, matches)
+					orighost = m["host"]
+					origmsg = m["message"]
+					break
+				}
+			}
+
+			msg := "[][][" + orighost + "][" + message.Time + "][]" + origmsg
 			if opts.LogDecoderProtocol == "tcp" {
 				msg = msg + "\n"
 			}
