@@ -48,8 +48,8 @@ type Options struct {
 	PIDFile            string `yaml:"pid-file"`
 	Logger             *logger.Logger
 	version            bool
-	StatsEnabled       bool
-	StatsHTTPPort      int
+	StatsEnabled       bool     `yaml:"statsenabled"`
+	StatsHTTPPort      int      `yaml:"statsport"`
 	LogDecoder         string   `yaml:"logdecoder"`
 	LogDecoderProtocol string   `yaml:"logdecoderprotocol"`
 	ListenPort         int      `yaml:"listenport"`
@@ -160,24 +160,12 @@ func (opts *Options) syslogreceiverFlagSet() {
 	// global options
 	flag.BoolVar(&opts.Verbose, "verbose", opts.Verbose, "enable/disable verbose logging")
 	flag.BoolVar(&opts.version, "version", opts.version, "show version")
-	flag.StringVar(&opts.PIDFile, "pid-file", opts.PIDFile, "pid file name")
-	flag.StringVar(&opts.LogDecoder, "logdecoder", opts.LogDecoder, "the address of the log decoder")
-	flag.StringVar(&opts.LogDecoderProtocol, "logdecoderprotocol", opts.LogDecoderProtocol, "the protcol to connect to the log decoder")
-	flag.IntVar(&opts.ListenPort, "listenport", opts.ListenPort, "syslogreceiver listening port number")
-	flag.StringVar(&opts.Protocol, "listenprotocol", opts.Protocol, "the protocol to listen for incoming traffic")
-	flag.IntVar(&opts.Workers, "workers", opts.Workers, "the number of workers forwarding messages to the log decoder")
-	flag.BoolVar(&opts.StatsEnabled, "stats-enabled", opts.StatsEnabled, "enable REST interface for status query")
-	flag.IntVar(&opts.StatsHTTPPort, "stats-http-port", opts.StatsHTTPPort, "The Listen Port for the REST Interface")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, `
     Example:
-	# listen on default port tcp/5514
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -rfc3164 "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
-
-	# specify port and protocol
-	rsa-nw-syslog-receiver -logdecoder 192.168.1.53 -listenport 6514 -listenprotocol udp -rfc3164 "^\\d\\s.*?\\s(.*?)\\s.*?\\[.*\\]\\s(.*)"
+	rsa-nw-syslog-receiver -config /etc/syslogreceiver/syslogreceiver.conf"
 	`)
 	}
 
