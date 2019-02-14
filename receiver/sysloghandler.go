@@ -228,12 +228,13 @@ func findNamedMatches(regex *regexp.Regexp, matches [][]string) map[string]strin
 // This Worker extracts messages from the queue and sends them to RSA Netwitness
 func syslogSender(queue *dque.DQue) {
 	var (
-		conn     net.Conn
-		err      error
-		iface    interface{}
-		msg      string
-		orighost string
-		origmsg  string
+		conn      net.Conn
+		err       error
+		iface     interface{}
+		msg       string
+		orighost  string
+		origmsg   string
+		eventtime string
 	)
 
 	log.Infof("Starting Syslog Sender with a Queue Size of %d", queue.Size())
@@ -281,6 +282,8 @@ LOOP:
 			msg = message.Msg
 			orighost = message.Host
 			origmsg = msg
+			eventtime = message.Time
+
 			// extract sender and original message
 			var (
 				m       map[string]string
@@ -293,11 +296,14 @@ LOOP:
 					m = findNamedMatches(pattern, matches)
 					orighost = m["host"]
 					origmsg = m["message"]
+					if unixtime, ok := m["unixtime"]; ok {
+						eventtime = unixtime
+					}
 					break
 				}
 			}
 
-			msg := "[][][" + orighost + "][" + message.Time + "][]" + origmsg
+			msg := "[][][" + orighost + "][" + eventtime + "][]" + origmsg
 			if opts.LogDecoderProtocol == "tcp" {
 				msg = msg + "\n"
 			}
