@@ -10,7 +10,7 @@
 Summary: Syslog Receiver to parse RFC3164 and RFC5424 compliant messages and forward them to a RSA Netwitness Log Decoder
 Name: rsa-nw-syslog-receiver
 Version: %VERSION%
-Release: 1.0.1
+Release: 1
 License: Apache
 Group: Utilities
 Packager: Helmut Wahrmann
@@ -34,7 +34,7 @@ mv $RPM_BUILD_ROOT/../etc/ $RPM_BUILD_ROOT/
 
 %files
 %attr(0744, root, root) /usr/local/bin/*
-%attr(0644, root, root) /etc/syslogreceiver/*
+%config %attr(0644, root, root) /etc/syslogreceiver/*
 %attr(0644, root, root) /usr/lib/systemd/system/rsa-nw-syslog-receiver.service
 
 %post
