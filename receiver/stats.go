@@ -39,6 +39,8 @@ func statsHTTPServer(sysloghandler *SyslogHandler) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stats", StatsHandler(sysloghandler))
+	mux.HandleFunc("/stats/events", StatsHandlerEvents(sysloghandler))
+	mux.HandleFunc("/stats/queue", StatsHandlerQueue(sysloghandler))
 
 	addr := net.JoinHostPort("0.0.0.0", strconv.Itoa(opts.StatsHTTPPort))
 
@@ -49,7 +51,7 @@ func statsHTTPServer(sysloghandler *SyslogHandler) {
 	}
 }
 
-// StatsHandler handles /flow endpoint
+// StatsHandler returns the stats as part of the REST call
 func StatsHandler(h *SyslogHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var data = &struct {
@@ -66,6 +68,30 @@ func StatsHandler(h *SyslogHandler) http.HandlerFunc {
 		}
 
 		if _, err = w.Write(j); err != nil {
+			opts.Logger.Info(err)
+		}
+	}
+}
+
+// StatsHandlerEvents returns the number of Events as part of the REST call
+func StatsHandlerEvents(h *SyslogHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var stats = h.status()
+		var data = strconv.FormatUint(stats.Events, 10)
+
+		if _, err := w.Write([]byte(data)); err != nil {
+			opts.Logger.Info(err)
+		}
+	}
+}
+
+// StatsHandlerQueue returns the number of events in the queue as part of the REST call
+func StatsHandlerQueue(h *SyslogHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var stats = h.status()
+		var data = strconv.Itoa(stats.QueueCount)
+
+		if _, err := w.Write([]byte(data)); err != nil {
 			opts.Logger.Info(err)
 		}
 	}

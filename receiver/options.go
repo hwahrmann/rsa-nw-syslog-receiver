@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	version      = "1.0"
+	version      = "1.0.1"
 	maxWorkers   = runtime.NumCPU() * 1e4
 	regexRFC3164 = "^(?P<message>(?P<time>[A-Z][a-z][a-z]\\s{1,2}\\d{1,2}\\s\\d{2}[:]\\d{2}[:]\\d{2})\\s(?P<host>[\\w][\\w\\d\\.@-]*)\\s.*)$"
 	regexRFC5424 = "^[1-9]\\d{0,2} (?P<time>(\\d{4}[-]\\d{2}[-]\\d{2}[T]\\d{2}[:]\\d{2}[:]\\d{2}(?:\\.\\d{1,6})?(?:[+-]\\d{2}[:]\\d{2}|Z)?)|-)\\s(?P<host>([\\w][\\w\\d\\.@-]*)|-)\\s(?P<ident>[^ ]+)\\s(?P<pid>[-0-9]+)\\s(?P<msgid>[^ ]+)\\s?(?P<extradata>(\\[(.*)\\]|[^ ]))?\\s(?P<message>.*)$"

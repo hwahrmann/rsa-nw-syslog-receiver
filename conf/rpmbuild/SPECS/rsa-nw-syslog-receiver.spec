@@ -10,7 +10,7 @@
 Summary: Syslog Receiver to parse RFC3164 and RFC5424 compliant messages and forward them to a RSA Netwitness Log Decoder
 Name: rsa-nw-syslog-receiver
 Version: %VERSION%
-Release: 1
+Release: 1.0.1
 License: Apache
 Group: Utilities
 Packager: Helmut Wahrmann
