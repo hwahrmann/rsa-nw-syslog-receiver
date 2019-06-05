@@ -32,6 +32,10 @@ var (
 	opts *Options
 )
 
+const (
+	tcp = "tcp"
+)
+
 type handler interface {
 	run() error
 	shutdown()

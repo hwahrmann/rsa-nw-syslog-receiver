@@ -26,6 +26,7 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -65,7 +66,6 @@ var (
 
 const (
 	queueName = "syslogreceiver"
-
 	queueDir  = "/tmp"
 	queueSize = 100
 )
@@ -235,6 +235,7 @@ func syslogSender(queue *dque.DQue) {
 		orighost  string
 		origmsg   string
 		eventtime string
+		msgprefix string
 	)
 
 	log.Infof("Starting Syslog Sender with a Queue Size of %d", queue.Size())
@@ -247,7 +248,7 @@ func syslogSender(queue *dque.DQue) {
 			return
 		}
 	} else {
-		conn, err = net.Dial("tcp", host)
+		conn, err = net.Dial(tcp, host)
 		if err != nil {
 			log.Errorf("Worker could not connect to log decoder: %s\n", err)
 			log.Info("Leaving Sylog Sender")
@@ -283,6 +284,7 @@ LOOP:
 			orighost = message.Host
 			origmsg = msg
 			eventtime = message.Time
+			msgprefix = ""
 
 			// extract sender and original message
 			var (
@@ -290,7 +292,7 @@ LOOP:
 				matches [][]string
 			)
 
-			for _, pattern := range patterns {
+			for i, pattern := range patterns {
 				matches = pattern.FindAllStringSubmatch(msg, -1)
 				if matches != nil {
 					m = findNamedMatches(pattern, matches)
@@ -299,12 +301,21 @@ LOOP:
 					if unixtime, ok := m["unixtime"]; ok {
 						eventtime = unixtime
 					}
+					// Special hack for Exchange Logs forwarded by VMware Logs Insight
+					search := opts.Search[i]
+					if len(search.Messageprefix) > 0 {
+						prefix := strings.Split(search.Messageprefix, "->")
+						if _, ok := m[strings.Trim(prefix[0], " ")]; ok {
+							msgprefix = msgprefix + prefix[1]
+						}
+						origmsg = msgprefix + origmsg
+					}
 					break
 				}
 			}
 
 			msg := "[][][" + orighost + "][" + eventtime + "][]" + origmsg
-			if opts.LogDecoderProtocol == "tcp" {
+			if opts.LogDecoderProtocol == tcp {
 				msg = msg + "\n"
 			}
 			_, err = conn.Write([]byte(msg))
@@ -323,8 +334,8 @@ func checkConnection() {
 	log.Info("Starting connection check for Log Decoder")
 	host := opts.LogDecoder + ":514"
 	for {
-		tcpAddr, _ := net.ResolveTCPAddr("tcp", host)
-		conn, err := net.DialTCP("tcp", nil, tcpAddr)
+		tcpAddr, _ := net.ResolveTCPAddr(tcp, host)
+		conn, err := net.DialTCP(tcp, nil, tcpAddr)
 		if err != nil {
 			time.Sleep(5000 * time.Millisecond)
 			continue

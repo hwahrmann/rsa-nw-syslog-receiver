@@ -1,4 +1,4 @@
-VERSION= 1.0.1
+VERSION= 1.0.2
 LDFLAGS= -ldflags "-X main.version=${VERSION}"
 RPM_BUILD_PATH= ~/rpmbuild
 RPM_BUILD_ROOT= ${RPM_BUILD_PATH}/BUILDROOT

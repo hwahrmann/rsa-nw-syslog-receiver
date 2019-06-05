@@ -60,9 +60,10 @@ type Options struct {
 
 // Search represents a Search structure
 type Search struct {
-	Regex   string
-	Type    string
-	Mapping []string
+	Regex         string
+	Type          string
+	Messageprefix string
+	Mapping       []string
 }
 
 func init() {
@@ -78,8 +79,8 @@ func NewOptions() *Options {
 	options.PIDFile = "/var/run/rsa-nw-syslog-receiver.pid"
 	options.ListenPort = 5514
 	options.LogDecoder = "127.0.0.1"
-	options.LogDecoderProtocol = "tcp"
-	options.Protocol = "tcp"
+	options.LogDecoderProtocol = tcp
+	options.Protocol = tcp
 	options.Workers = 5
 	options.Logger = logger.Init("", options.Verbose, true, ioutil.Discard)
 	options.StatsEnabled = true
